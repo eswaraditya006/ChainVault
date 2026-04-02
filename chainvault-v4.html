@@ -1,0 +1,3021 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ChainVault — P2P Banking</title>
+  <script src="https://cdn.pubnub.com/sdk/javascript/pubnub.9.3.2.min.js"></script>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&family=Clash+Display:wght@700&display=swap"
+    rel="stylesheet" />
+  <!-- Fallback for Clash Display -->
+  <link href="https://api.fontshare.com/v2/css?f[]=clash-display@700&display=swap" rel="stylesheet" />
+  <style>
+    /* ═══════════════════ DESIGN TOKENS ═══════════════════ */
+    :root {
+      /* Dark navy base — refined banking aesthetic */
+      --ink: #05080c;
+      --ink1: rgba(13, 21, 32, 0.4);
+      --ink2: rgba(17, 29, 46, 0.5);
+      --ink3: rgba(22, 34, 53, 0.7);
+      --line: rgba(42, 60, 85, 0.4);
+      --line2: rgba(58, 88, 128, 0.6);
+
+      /* Accent palette */
+      --lime: #c8f135;
+      /* primary CTA — electric lime */
+      --lime2: #a0cc10;
+      --sky: #5bc8fa;
+      --sky2: #2aa8e0;
+      --rose: #f5476e;
+      --amber: #f5b332;
+      --mint: #34e8a0;
+      --violet: #9d7fff;
+
+      /* Text */
+      --t0: #e8f4ff;
+      --t1: #8aafc8;
+      --t2: #3a5870;
+      --t3: #1e3348;
+
+      --mono: 'JetBrains Mono', monospace;
+      --sans: 'Space Grotesk', sans-serif;
+      --display: 'Clash Display', 'Space Grotesk', sans-serif;
+
+      --glass-blur: blur(16px);
+      --glass-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+    }
+
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html,
+    body {
+      height: 100%;
+      background: var(--ink);
+      color: var(--t0);
+      font-family: var(--sans);
+      overflow-x: hidden;
+    }
+
+    @keyframes moveOrbs {
+      0% {
+        background-position: 0% 0%, 100% 100%, 0 0, 0 0;
+      }
+
+      50% {
+        background-position: 100% 100%, 0% 0%, 0 0, 0 0;
+      }
+
+      100% {
+        background-position: 0% 0%, 100% 100%, 0 0, 0 0;
+      }
+    }
+
+    /* Grid texture */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background-image:
+        radial-gradient(circle at 15% 20%, #c8f1351a 0%, transparent 50%),
+        radial-gradient(circle at 85% 80%, #5bc8fa15 0%, transparent 50%),
+        repeating-linear-gradient(0deg, transparent, transparent 79px, #1a2d421a 80px),
+        repeating-linear-gradient(90deg, transparent, transparent 79px, #1a2d421a 80px);
+      background-size: 150vw 150vh, 150vw 150vh, 100% 100%, 100% 100%;
+      animation: moveOrbs 25s ease-in-out infinite;
+    }
+
+    .z {
+      position: relative;
+      z-index: 1;
+    }
+
+    /* ═══════════════════ SCREEN SYSTEM ═══════════════════ */
+    .screen {
+      display: none;
+      min-height: 100vh;
+    }
+
+    .screen.on {
+      display: flex;
+    }
+
+    /* ═══════════════════ AUTH SHELL ═══════════════════ */
+    .auth-shell {
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+      position: relative;
+    }
+
+    .auth-left {
+      width: 460px;
+      flex-shrink: 0;
+      background: rgba(13, 26, 46, 0.4);
+      backdrop-filter: var(--glass-blur);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 60px 40px;
+      border: 1px solid var(--line);
+      border-right: none;
+      border-radius: 24px 0 0 24px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: var(--glass-shadow);
+    }
+
+    .auth-left::before {
+      content: '';
+      position: absolute;
+      bottom: -80px;
+      left: -80px;
+      width: 400px;
+      height: 400px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(200, 241, 53, 0.15) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .auth-right {
+      width: 460px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 48px 44px;
+      background: rgba(13, 21, 32, 0.6);
+      backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--line);
+      border-radius: 0 24px 24px 0;
+      box-shadow: var(--glass-shadow);
+    }
+
+    @media (max-width: 960px) {
+      .auth-shell {
+        flex-direction: column;
+        padding: 20px;
+      }
+
+      .auth-left {
+        display: none;
+      }
+
+      .auth-right {
+        width: 100%;
+        max-width: 460px;
+        padding: 36px 24px;
+        border-radius: 24px;
+        border-left: 1px solid var(--line);
+      }
+    }
+
+    /* Brand mark */
+    .brand {
+      margin-bottom: 48px;
+    }
+
+    .brand-logo {
+      font-family: var(--display);
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--t0);
+      letter-spacing: -1px;
+      line-height: 1;
+    }
+
+    .brand-logo span {
+      background: linear-gradient(135deg, var(--lime), var(--mint));
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      color: var(--lime);
+    }
+
+    .brand-tag {
+      font-size: 11px;
+      color: var(--t2);
+      letter-spacing: 3px;
+      margin-top: 6px;
+      font-family: var(--mono);
+    }
+
+    .hero-title {
+      font-family: var(--display);
+      font-size: 44px;
+      font-weight: 700;
+      line-height: 1.1;
+      color: var(--t0);
+      margin-bottom: 20px;
+      letter-spacing: -1px;
+    }
+
+    .hero-title span {
+      background: linear-gradient(135deg, var(--lime), var(--mint));
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      color: var(--lime);
+    }
+
+    .hero-desc {
+      font-size: 14px;
+      color: var(--t1);
+      line-height: 1.8;
+      max-width: 380px;
+      margin-bottom: 36px;
+    }
+
+    .feature-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .feat {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--ink2);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px 16px;
+    }
+
+    .feat-icon {
+      font-size: 18px;
+    }
+
+    .feat-text {
+      font-size: 12px;
+      color: var(--t1);
+    }
+
+    .feat-text strong {
+      color: var(--t0);
+      display: block;
+      margin-bottom: 1px;
+      font-size: 13px;
+    }
+
+    /* Auth form */
+    .auth-title {
+      font-family: var(--display);
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--t0);
+      margin-bottom: 6px;
+    }
+
+    .auth-sub {
+      font-size: 13px;
+      color: var(--t1);
+      margin-bottom: 32px;
+      line-height: 1.5;
+    }
+
+    .fld {
+      margin-bottom: 18px;
+    }
+
+    .fld label {
+      display: block;
+      font-size: 11px;
+      color: var(--t1);
+      letter-spacing: 1px;
+      margin-bottom: 7px;
+      font-weight: 600;
+      font-family: var(--mono);
+    }
+
+    .fld input,
+    .fld select {
+      width: 100%;
+      background: var(--ink2);
+      border: 1.5px solid var(--line);
+      border-radius: 10px;
+      color: var(--t0);
+      padding: 13px 16px;
+      font-family: var(--sans);
+      font-size: 14px;
+      outline: none;
+      transition: border-color .2s, box-shadow .2s;
+    }
+
+    .fld input:focus,
+    .fld select:focus {
+      border-color: var(--lime);
+      box-shadow: 0 0 0 3px #c8f13515;
+    }
+
+    .fld input::placeholder {
+      color: var(--t2);
+    }
+
+    .fld input[readonly] {
+      color: var(--lime);
+      cursor: default;
+      background: var(--ink3);
+    }
+
+    select option {
+      background: var(--ink);
+    }
+
+    .fld-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    @media(max-width:500px) {
+      .fld-row {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .err {
+      font-size: 11px;
+      color: var(--rose);
+      margin-top: 6px;
+      display: none;
+      font-family: var(--mono);
+    }
+
+    .err.on {
+      display: block;
+    }
+
+    /* Buttons */
+    .btn {
+      border: none;
+      border-radius: 10px;
+      padding: 13px 22px;
+      cursor: pointer;
+      font-family: var(--sans);
+      font-weight: 700;
+      font-size: 14px;
+      transition: all .2s;
+      letter-spacing: 0.2px;
+    }
+
+    .btn-lime {
+      background: var(--lime);
+      color: var(--ink);
+    }
+
+    .btn-lime:hover {
+      background: #d4ff40;
+      transform: translateY(-2px) scale(1.02);
+      box-shadow: 0 8px 24px rgba(200, 241, 53, 0.4);
+    }
+
+    .btn-sky {
+      background: var(--sky);
+      color: var(--ink);
+    }
+
+    .btn-sky:hover {
+      background: #7ad4ff;
+      transform: translateY(-2px) scale(1.02);
+      box-shadow: 0 8px 24px rgba(91, 200, 250, 0.4);
+    }
+
+    .btn-ghost {
+      background: transparent;
+      border: 1.5px solid var(--line);
+      color: var(--t1);
+    }
+
+    .btn-ghost:hover {
+      border-color: var(--lime);
+      color: var(--lime);
+    }
+
+    .btn-rose {
+      background: var(--rose);
+      color: #fff;
+    }
+
+    .btn-rose:hover {
+      filter: brightness(1.1);
+    }
+
+    .btn-amber {
+      background: var(--amber);
+      color: var(--ink);
+    }
+
+    .btn-amber:hover {
+      filter: brightness(1.08);
+    }
+
+    .btn:disabled {
+      opacity: .3;
+      cursor: not-allowed;
+      transform: none !important;
+      box-shadow: none !important;
+    }
+
+    .wfull {
+      width: 100%;
+    }
+
+    .btn-sm {
+      padding: 7px 14px;
+      font-size: 12px;
+      border-radius: 8px;
+    }
+
+    .btn-xs {
+      padding: 5px 10px;
+      font-size: 11px;
+      border-radius: 6px;
+    }
+
+    /* Auth divider */
+    .or-line {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 22px 0;
+      color: var(--t2);
+      font-size: 12px;
+      font-family: var(--mono);
+    }
+
+    .or-line::before,
+    .or-line::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--line);
+    }
+
+    /* Biometric button */
+    .bio-btn {
+      width: 100%;
+      background: var(--ink2);
+      border: 1.5px solid var(--line);
+      border-radius: 10px;
+      padding: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      color: var(--sky);
+      font-family: var(--sans);
+      font-weight: 600;
+      font-size: 14px;
+      transition: all .2s;
+    }
+
+    .bio-btn:hover {
+      border-color: var(--sky);
+      background: var(--ink3);
+      box-shadow: 0 0 0 3px #5bc8fa15;
+    }
+
+    .bio-btn svg {
+      flex-shrink: 0;
+    }
+
+    .bio-btn.scanning {
+      border-color: var(--lime);
+      color: var(--lime);
+      animation: bioscan 1.5s ease-in-out infinite;
+    }
+
+    @keyframes bioscan {
+
+      0%,
+      100% {
+        box-shadow: 0 0 0 3px #c8f13520
+      }
+
+      50% {
+        box-shadow: 0 0 0 8px #c8f13510
+      }
+    }
+
+    /* Auth link */
+    .auth-link {
+      color: var(--lime);
+      text-decoration: none;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .auth-link:hover {
+      text-decoration: underline;
+    }
+
+    .auth-foot {
+      font-size: 13px;
+      color: var(--t1);
+      margin-top: 22px;
+      text-align: center;
+    }
+
+    /* Demo hint */
+    .demo-hint {
+      background: var(--ink2);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-top: 16px;
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--t2);
+    }
+
+    .demo-hint strong {
+      color: var(--amber);
+    }
+
+    /* ═══════════════════ APP LAYOUT ═══════════════════ */
+    #scr-app {
+      flex-direction: column;
+    }
+
+    .app-wrap {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+    }
+
+    /* Top Nav */
+    .topnav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      height: 58px;
+      background: var(--ink1);
+      backdrop-filter: var(--glass-blur);
+      border-bottom: 1px solid var(--line);
+      position: sticky;
+      top: 0;
+      z-index: 200;
+      flex-shrink: 0;
+    }
+
+    .nav-brand {
+      font-family: var(--display);
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--t0);
+      letter-spacing: -0.5px;
+    }
+
+    .nav-brand span {
+      color: var(--lime);
+    }
+
+    .nav-room {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--t2);
+      margin-top: 1px;
+      letter-spacing: 2px;
+    }
+
+    .nav-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .chip {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--ink2);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 11px;
+      font-family: var(--mono);
+    }
+
+    .live-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--t2);
+    }
+
+    .live-dot.on {
+      background: var(--mint);
+      box-shadow: 0 0 8px var(--mint);
+      animation: lblink 2s infinite;
+    }
+
+    .live-dot.warn {
+      background: var(--amber);
+    }
+
+    @keyframes lblink {
+
+      0%,
+      100% {
+        opacity: 1
+      }
+
+      50% {
+        opacity: .3
+      }
+    }
+
+    .chain-badge {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 700;
+      padding: 5px 10px;
+      border-radius: 6px;
+    }
+
+    .chain-ok {
+      background: #34e8a015;
+      border: 1px solid #34e8a030;
+      color: var(--mint);
+    }
+
+    .chain-bad {
+      background: #f5476e15;
+      border: 1px solid #f5476e30;
+      color: var(--rose);
+    }
+
+    .user-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--ink2);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      padding: 4px 12px 4px 6px;
+      cursor: pointer;
+      transition: border-color .2s;
+    }
+
+    .user-btn:hover {
+      border-color: var(--lime);
+    }
+
+    .user-av {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      background: var(--ink3);
+      border: 1px solid var(--line2);
+    }
+
+    .user-meta {
+      line-height: 1.3;
+    }
+
+    .user-nm {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--t0);
+    }
+
+    .user-rl {
+      font-size: 9px;
+      color: var(--t2);
+      font-family: var(--mono);
+      letter-spacing: 1px;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 210px;
+      flex-shrink: 0;
+      background: var(--ink1);
+      backdrop-filter: var(--glass-blur);
+      border-right: 1px solid var(--line);
+      padding: 16px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      overflow-y: auto;
+    }
+
+    .nav-sec {
+      font-size: 9px;
+      color: var(--t3);
+      letter-spacing: 2px;
+      padding: 10px 12px 4px;
+      margin-top: 6px;
+      font-weight: 700;
+      font-family: var(--mono);
+    }
+
+    .nav-it {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      color: var(--t1);
+      border: 1px solid transparent;
+      transition: all .15s;
+    }
+
+    .nav-it:hover {
+      background: var(--ink2);
+      color: var(--t0);
+    }
+
+    .nav-it.on {
+      background: var(--ink2);
+      color: var(--lime);
+      border-color: var(--line);
+      font-weight: 600;
+    }
+
+    .nav-it.on .nav-ic {
+      filter: none;
+    }
+
+    .nav-ic {
+      font-size: 16px;
+      width: 20px;
+      text-align: center;
+    }
+
+    .nav-pill {
+      margin-left: auto;
+      background: var(--rose);
+      color: #fff;
+      border-radius: 10px;
+      padding: 1px 7px;
+      font-size: 9px;
+      font-weight: 700;
+      font-family: var(--mono);
+      display: none;
+    }
+
+    .nav-pill.on {
+      display: inline-block;
+    }
+
+    /* Content */
+    .content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+      background: transparent;
+    }
+
+    /* Pages */
+    .pg {
+      display: none;
+    }
+
+    .pg.on {
+      display: block;
+    }
+
+    /* Page header */
+    .pg-hdr {
+      margin-bottom: 22px;
+    }
+
+    .pg-title {
+      font-family: var(--display);
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--t0);
+    }
+
+    .pg-sub {
+      font-size: 12px;
+      color: var(--t1);
+      margin-top: 4px;
+      font-family: var(--mono);
+    }
+
+    /* ═══════════════════ COMPONENTS ═══════════════════ */
+
+    /* Stat boxes */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .stat {
+      background: rgba(17, 29, 46, 0.4);
+      backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px 18px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .stat:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    }
+
+    .stat::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+    }
+
+    .stat.teal::before {
+      background: linear-gradient(90deg, var(--lime), transparent);
+    }
+
+    .stat.sky::before {
+      background: linear-gradient(90deg, var(--sky), transparent);
+    }
+
+    .stat.mint::before {
+      background: linear-gradient(90deg, var(--mint), transparent);
+    }
+
+    .stat.amber::before {
+      background: linear-gradient(90deg, var(--amber), transparent);
+    }
+
+    .stat.rose::before {
+      background: linear-gradient(90deg, var(--rose), transparent);
+    }
+
+    .stat-v {
+      font-family: var(--display);
+      font-size: 24px;
+      font-weight: 700;
+      margin: 6px 0 4px;
+    }
+
+    .stat-l {
+      font-size: 10px;
+      color: var(--t2);
+      letter-spacing: 1.5px;
+      font-family: var(--mono);
+    }
+
+    .stat-ico {
+      font-size: 20px;
+      margin-bottom: 2px;
+    }
+
+    /* Balance hero */
+    .bal-hero {
+      background: linear-gradient(135deg, var(--ink2) 0%, #0f1e30 100%);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 28px;
+      margin-bottom: 20px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .bal-hero::after {
+      content: '';
+      position: absolute;
+      right: -60px;
+      top: -60px;
+      width: 200px;
+      height: 200px;
+      border-radius: 50%;
+      background: radial-gradient(circle, #c8f13508, transparent 70%);
+    }
+
+    .bal-eyebrow {
+      font-size: 10px;
+      color: var(--t2);
+      letter-spacing: 3px;
+      font-family: var(--mono);
+      margin-bottom: 8px;
+    }
+
+    .bal-amount {
+      font-family: var(--display);
+      font-size: 40px;
+      font-weight: 700;
+      color: var(--t0);
+      margin-bottom: 6px;
+    }
+
+    .bal-amount span {
+      color: var(--lime);
+    }
+
+    .bal-acc {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--t2);
+      letter-spacing: 2px;
+    }
+
+    .bal-actions {
+      position: absolute;
+      bottom: 24px;
+      right: 24px;
+      display: flex;
+      gap: 8px;
+    }
+
+    /* Cards */
+    .card {
+      background: rgba(13, 21, 32, 0.4);
+      backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 18px 20px;
+      margin-bottom: 14px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    }
+
+    .card-tl {
+      font-size: 10px;
+      color: var(--t2);
+      letter-spacing: 2px;
+      margin-bottom: 14px;
+      font-family: var(--mono);
+      font-weight: 700;
+    }
+
+    .g2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .g3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+    }
+
+    @media(max-width:700px) {
+
+      .g2,
+      .g3 {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* TX items */
+    .tx-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .tx-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: rgba(17, 29, 46, 0.4);
+      backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px 14px;
+      cursor: pointer;
+      transition: all .2s;
+    }
+
+    .tx-item:hover {
+      border-color: var(--lime);
+      background: rgba(22, 34, 53, 0.6);
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    }
+
+    @keyframes slup {
+      from {
+        opacity: 0;
+        transform: translateY(4px)
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0)
+      }
+    }
+
+    .tx-ico {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    .tx-ico.out {
+      background: #f5476e12;
+      border: 1px solid #f5476e25;
+    }
+
+    .tx-ico.in {
+      background: #34e8a012;
+      border: 1px solid #34e8a025;
+    }
+
+    .tx-ico.blk {
+      background: #f5b33212;
+      border: 1px solid #f5b33225;
+    }
+
+    .tx-body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .tx-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--t0);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .tx-meta {
+      font-size: 10px;
+      color: var(--t2);
+      margin-top: 2px;
+      font-family: var(--mono);
+    }
+
+    .tx-right {
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    .tx-amt {
+      font-family: var(--display);
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .tx-amt.out {
+      color: var(--rose);
+    }
+
+    .tx-amt.in {
+      color: var(--mint);
+    }
+
+    .tx-time {
+      font-size: 10px;
+      color: var(--t2);
+      font-family: var(--mono);
+      margin-top: 2px;
+    }
+
+    /* Badges */
+    .bdg {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      font-family: var(--mono);
+    }
+
+    .bdg-p {
+      background: #f5b33218;
+      color: var(--amber);
+      border: 1px solid #f5b33230;
+    }
+
+    .bdg-c {
+      background: #34e8a018;
+      color: var(--mint);
+      border: 1px solid #34e8a030;
+    }
+
+    .bdg-f {
+      background: #f5476e18;
+      color: var(--rose);
+      border: 1px solid #f5476e30;
+    }
+
+    .bdg-g {
+      background: #c8f13518;
+      color: var(--lime);
+      border: 1px solid #c8f13530;
+    }
+
+    .bdg-a {
+      background: #5bc8fa18;
+      color: var(--sky);
+      border: 1px solid #5bc8fa30;
+    }
+
+    /* Peer card */
+    .peer-card {
+      background: rgba(17, 29, 46, 0.4);
+      backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: all .2s;
+      border-left: 3px solid var(--mint);
+    }
+
+    .peer-card:hover,
+    .peer-card.sel {
+      border-color: var(--lime);
+      background: rgba(22, 34, 53, 0.6);
+      box-shadow: -4px 4px 12px rgba(0, 0, 0, 0.2);
+    }
+
+    .peer-card.me {
+      border-left-color: var(--lime);
+    }
+
+    /* Block item */
+    .blk-item {
+      background: rgba(17, 29, 46, 0.4);
+      backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 10px;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .blk-item:hover {
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+    }
+
+    .blk-item.fresh {
+      border-color: var(--lime);
+      box-shadow: 0 0 20px rgba(200, 241, 53, 0.2);
+    }
+
+    .blk-num-bg {
+      position: absolute;
+      right: -8px;
+      top: -8px;
+      font-family: var(--display);
+      font-size: 56px;
+      font-weight: 700;
+      color: var(--line);
+      pointer-events: none;
+      opacity: .6;
+    }
+
+    .blk-hash {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--lime);
+      word-break: break-all;
+      margin: 3px 0;
+    }
+
+    .blk-prev {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--sky);
+      word-break: break-all;
+      margin: 3px 0;
+    }
+
+    .blk-meta {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--t2);
+      margin-top: 8px;
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    /* Send peer selector */
+    .send-peer {
+      background: rgba(17, 29, 46, 0.4);
+      backdrop-filter: var(--glass-blur);
+      border: 1.5px solid var(--line);
+      border-radius: 10px;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      transition: all .2s;
+      margin-bottom: 8px;
+    }
+
+    .send-peer:hover,
+    .send-peer.sel {
+      border-color: var(--lime);
+      background: rgba(22, 34, 53, 0.6);
+      box-shadow: 0 4px 16px rgba(200, 241, 53, 0.15);
+    }
+
+    /* Receipt modal */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 500;
+      background: rgba(5, 8, 12, 0.6);
+      backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      animation: fdi .2s ease;
+    }
+
+    @keyframes fdi {
+      from {
+        opacity: 0
+      }
+
+      to {
+        opacity: 1
+      }
+    }
+
+    .modal {
+      background: rgba(13, 21, 32, 0.75);
+      backdrop-filter: blur(24px);
+      border: 1px solid rgba(200, 241, 53, 0.3);
+      border-radius: 20px;
+      padding: 30px;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6), inset 0 0 20px rgba(200, 241, 53, 0.05);
+      animation: mup .4s cubic-bezier(.34, 1.56, .64, 1);
+      position: relative;
+    }
+
+    @keyframes mup {
+      from {
+        transform: translateY(16px);
+        opacity: 0
+      }
+
+      to {
+        transform: translateY(0);
+        opacity: 1
+      }
+    }
+
+    .modal-x {
+      position: absolute;
+      top: 14px;
+      right: 16px;
+      background: none;
+      border: none;
+      color: var(--t2);
+      cursor: pointer;
+      font-size: 18px;
+      transition: color .15s;
+    }
+
+    .modal-x:hover {
+      color: var(--t0);
+    }
+
+    /* Receipt design */
+    .rcpt-header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .rcpt-logo {
+      font-family: var(--display);
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--t0);
+    }
+
+    .rcpt-logo span {
+      color: var(--lime);
+    }
+
+    .rcpt-sub {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--t2);
+      letter-spacing: 3px;
+      margin-top: 3px;
+    }
+
+    .rcpt-status {
+      font-family: var(--display);
+      font-size: 14px;
+      font-weight: 700;
+      margin-top: 6px;
+    }
+
+    .rcpt-amount {
+      font-family: var(--display);
+      font-size: 34px;
+      font-weight: 700;
+      color: var(--lime);
+      text-align: center;
+      margin: 16px 0;
+    }
+
+    .rcpt-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 12px;
+    }
+
+    .rcpt-row:last-of-type {
+      border-bottom: none;
+    }
+
+    .rcpt-lbl {
+      color: var(--t2);
+      font-family: var(--mono);
+      font-size: 10px;
+    }
+
+    .rcpt-val {
+      color: var(--t0);
+      font-weight: 600;
+      text-align: right;
+      max-width: 60%;
+      word-break: break-all;
+    }
+
+    .rcpt-hash {
+      margin-top: 14px;
+      background: var(--ink);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--t2);
+      text-align: center;
+      line-height: 1.7;
+    }
+
+    /* Admin table */
+    .tbl {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    .tbl th {
+      text-align: left;
+      padding: 8px 12px;
+      font-size: 10px;
+      color: var(--t2);
+      letter-spacing: 1px;
+      border-bottom: 1px solid var(--line);
+      font-family: var(--mono);
+      font-weight: 700;
+    }
+
+    .tbl td {
+      padding: 11px 12px;
+      border-bottom: 1px solid var(--ink2);
+    }
+
+    .tbl tr:hover td {
+      background: var(--ink2);
+    }
+
+    .tbl-wrap {
+      overflow-x: auto;
+      border-radius: 8px;
+    }
+
+    /* Nodes / log */
+    .log-box {
+      background: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px 12px;
+      height: 150px;
+      overflow-y: auto;
+      font-family: var(--mono);
+      font-size: 10px;
+      line-height: 1.9;
+    }
+
+    .log-k {
+      color: var(--mint);
+    }
+
+    .log-i {
+      color: var(--sky);
+    }
+
+    .log-w {
+      color: var(--amber);
+    }
+
+    .log-e {
+      color: var(--rose);
+    }
+
+    /* Room code display */
+    .room-code-big {
+      font-family: var(--display);
+      font-size: 36px;
+      font-weight: 700;
+      color: var(--lime);
+      letter-spacing: 10px;
+      text-align: center;
+      background: var(--ink2);
+      border: 1.5px dashed var(--line2);
+      border-radius: 12px;
+      padding: 20px;
+      cursor: pointer;
+      transition: all .2s;
+    }
+
+    .room-code-big:hover {
+      border-color: var(--lime);
+      background: var(--ink3);
+    }
+
+    /* Toast */
+    #toast {
+      position: fixed;
+      bottom: 22px;
+      right: 18px;
+      z-index: 9999;
+      background: var(--ink1);
+      border: 1px solid var(--lime);
+      color: var(--lime);
+      padding: 11px 18px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      max-width: 300px;
+      transform: translateY(50px);
+      opacity: 0;
+      transition: all .3s;
+      box-shadow: 0 8px 32px #c8f13518;
+    }
+
+    #toast.on {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    #toast.err {
+      border-color: var(--rose);
+      color: var(--rose);
+      box-shadow: 0 8px 32px #f5476e18;
+    }
+
+    #toast.warn {
+      border-color: var(--amber);
+      color: var(--amber);
+    }
+
+    /* Notify */
+    #notify {
+      position: fixed;
+      top: 68px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-90px);
+      background: var(--ink1);
+      border: 1px solid var(--mint);
+      color: var(--mint);
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      z-index: 999;
+      transition: transform .4s cubic-bezier(.34, 1.56, .64, 1);
+      box-shadow: 0 0 24px #34e8a018;
+      white-space: nowrap;
+      font-family: var(--sans);
+    }
+
+    #notify.on {
+      transform: translateX(-50%) translateY(0);
+    }
+
+    #notify.tx {
+      border-color: var(--sky);
+      color: var(--sky);
+    }
+
+    /* Connecting overlay */
+    #cov {
+      position: fixed;
+      inset: 0;
+      z-index: 600;
+      background: #080c14f0;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+    }
+
+    .spin-ring {
+      width: 44px;
+      height: 44px;
+      border: 3px solid var(--line);
+      border-top-color: var(--lime);
+      border-radius: 50%;
+      animation: spr 1s linear infinite;
+    }
+
+    @keyframes spr {
+      to {
+        transform: rotate(360deg)
+      }
+    }
+
+    .spin-sm {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border: 2px solid #ffffff30;
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spr .7s linear infinite;
+      vertical-align: middle;
+      margin-right: 5px;
+    }
+
+    /* Mining progress */
+    .mine-prog {
+      background: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-top: 10px;
+      display: none;
+    }
+
+    .mine-prog.on {
+      display: block;
+    }
+
+    .prog-bar {
+      height: 3px;
+      background: var(--line);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+
+    .prog-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--lime2), var(--lime));
+      width: 0%;
+      transition: width .3s;
+      border-radius: 2px;
+      animation: progpulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes progpulse {
+
+      0%,
+      100% {
+        opacity: 1
+      }
+
+      50% {
+        opacity: .6
+      }
+    }
+
+    /* Room screen */
+    .room-screen {
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      min-height: 100vh;
+    }
+
+    .room-card {
+      background: var(--ink1);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 36px 32px;
+      width: 100%;
+      max-width: 480px;
+      box-shadow: 0 24px 60px #00000060;
+    }
+
+    .room-option {
+      background: var(--ink2);
+      border: 2px solid var(--line);
+      border-radius: 14px;
+      padding: 22px 20px;
+      cursor: pointer;
+      transition: all .2s;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .room-option:hover {
+      border-color: var(--lime);
+      background: var(--ink3);
+      box-shadow: 0 0 0 4px #c8f13510;
+    }
+
+    .room-option.active {
+      border-color: var(--lime);
+      background: var(--ink3);
+      box-shadow: 0 0 0 4px #c8f13515;
+    }
+
+    .room-opt-icon {
+      font-size: 32px;
+      flex-shrink: 0;
+    }
+
+    .room-opt-title {
+      font-family: var(--display);
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--t0);
+      margin-bottom: 3px;
+    }
+
+    .room-opt-sub {
+      font-size: 12px;
+      color: var(--t1);
+    }
+
+    .join-input-wrap {
+      background: var(--ink2);
+      border: 2px solid var(--line);
+      border-radius: 12px;
+      padding: 18px 20px;
+      margin-top: 8px;
+      display: none;
+    }
+
+    .join-input-wrap.on {
+      display: block;
+    }
+
+    .room-code-input {
+      width: 100%;
+      background: var(--ink);
+      border: 2px solid var(--line2);
+      border-radius: 10px;
+      color: var(--lime);
+      padding: 14px;
+      font-family: var(--display);
+      font-size: 28px;
+      font-weight: 700;
+      text-align: center;
+      letter-spacing: 10px;
+      outline: none;
+      transition: border-color .2s;
+    }
+
+    .room-code-input:focus {
+      border-color: var(--lime);
+      box-shadow: 0 0 0 3px #c8f13515;
+    }
+
+    .room-code-input::placeholder {
+      color: var(--t3);
+      letter-spacing: 6px;
+      font-size: 20px;
+    }
+
+    /* Misc */
+    hr.sep {
+      border: none;
+      border-top: 1px solid var(--line);
+      margin: 14px 0;
+    }
+
+    .empty {
+      color: var(--t2);
+      font-size: 12px;
+      text-align: center;
+      padding: 36px;
+      line-height: 2;
+      font-family: var(--mono);
+    }
+
+    .muted {
+      color: var(--t2);
+      font-size: 11px;
+    }
+
+    .mono {
+      font-family: var(--mono);
+    }
+
+    /* Preview box */
+    .preview-box {
+      background: var(--ink2);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 16px;
+    }
+
+    .preview-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 7px 0;
+      border-bottom: 1px solid var(--line);
+      font-size: 12px;
+    }
+
+    .preview-row:last-child {
+      border: none;
+    }
+
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--ink);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--line2);
+      border-radius: 3px;
+    }
+  </style>
+</head>
+
+<body class="z">
+
+  <!-- ══ CONNECTING OVERLAY ══ -->
+  <div id="cov">
+    <div class="spin-ring"></div>
+    <div style="font-family:var(--display);font-size:15px;color:var(--lime);letter-spacing:2px">CONNECTING</div>
+    <div id="cov-msg" style="font-family:var(--mono);font-size:11px;color:var(--t2)">Joining network…</div>
+  </div>
+
+  <!-- ════════════════════════════════════
+     SCREEN: LOGIN
+════════════════════════════════════ -->
+  <div id="scr-login" class="screen on auth-shell z">
+    <!-- LEFT PANEL -->
+    <div class="auth-left">
+      <div class="brand">
+        <div class="brand-logo">CHAIN<span>VAULT</span></div>
+      </div>
+    </div>
+    <!-- RIGHT: LOGIN FORM -->
+    <div class="auth-right">
+      <div class="auth-title">Welcome back</div>
+      <div class="auth-sub">Sign in to your ChainVault account</div>
+
+      <div class="fld">
+        <label>USERNAME</label>
+        <input id="l-user" type="text" placeholder="e.g. alice" autocomplete="username" autocapitalize="none" />
+      </div>
+      <div class="fld">
+        <label>PASSWORD</label>
+        <input id="l-pass" type="password" placeholder="Your password" autocomplete="current-password" />
+        <div class="err" id="l-err">Incorrect username or password</div>
+      </div>
+      <button class="btn btn-lime wfull" onclick="doLogin()">Sign In →</button>
+
+      <div class="or-line">or</div>
+
+      <button class="bio-btn" id="bio-btn" onclick="doBiometric()">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" />
+          <path d="M12 6c-1.5 0-2.8.6-3.8 1.6" />
+          <path d="M12 6c1.5 0 2.8.6 3.8 1.6" />
+          <path d="M7.2 10.5C7 11 7 11.5 7 12c0 2.8 2.2 5 5 5s5-2.2 5-5c0-.5 0-1-.2-1.5" />
+          <path d="M9 12c0 1.7 1.3 3 3 3s3-1.3 3-3" />
+          <line x1="12" y1="15" x2="12" y2="18" />
+        </svg>
+        Sign in with Fingerprint
+      </button>
+
+      <div class="auth-foot">
+        Don't have an account? <span class="auth-link" onclick="show('scr-register')">Register now</span>
+      </div>
+
+      <div class="demo-hint">
+        <strong>DEMO ACCOUNTS</strong><br />
+        admin / admin123 &nbsp;·&nbsp; alice / alice123 &nbsp;·&nbsp; bob / bob123<br />
+        <span style="color:var(--sky)">All accounts support fingerprint login in demo mode</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+     SCREEN: REGISTER
+════════════════════════════════════ -->
+  <div id="scr-register" class="screen auth-shell z">
+    <div class="auth-left">
+      <div class="brand">
+        <div class="brand-logo">CHAIN<span>VAULT</span></div>
+      </div>
+    </div>
+    <div class="auth-right" style="overflow-y:auto;max-height:100vh;padding-top:40px;padding-bottom:40px">
+      <div class="auth-title">Create Account</div>
+      <div class="auth-sub">Fill in the details below to get started</div>
+
+      <div class="fld-row">
+        <div class="fld"><label>FIRST NAME</label><input id="r-fn" placeholder="Alice" /></div>
+        <div class="fld"><label>LAST NAME</label><input id="r-ln" placeholder="Kumar" /></div>
+      </div>
+      <div class="fld"><label>USERNAME</label><input id="r-un" placeholder="alice_k" autocapitalize="none"
+          autocomplete="off" /></div>
+      <div class="fld"><label>EMAIL</label><input id="r-em" type="email" placeholder="alice@bank.com" /></div>
+      <div class="fld-row">
+        <div class="fld"><label>PASSWORD</label><input id="r-pw" type="password" placeholder="Min 6 chars" /></div>
+        <div class="fld"><label>CONFIRM</label><input id="r-pw2" type="password" placeholder="Repeat" /></div>
+      </div>
+      <div class="fld"><label>STARTING BALANCE (₹)</label><input id="r-bal" type="number" value="250000" min="1000" />
+      </div>
+      <div class="fld">
+        <label>AVATAR</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px" id="av-row">
+          <div class="av-o sel" data-v="👤" onclick="selAv(this)"
+            style="width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;background:var(--ink2);border:2px solid var(--lime);cursor:pointer;transition:all .15s">
+            👤</div>
+          <div class="av-o" data-v="🧑" onclick="selAv(this)"
+            style="width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;background:var(--ink2);border:2px solid var(--line);cursor:pointer;transition:all .15s">
+            🧑</div>
+          <div class="av-o" data-v="👩" onclick="selAv(this)"
+            style="width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;background:var(--ink2);border:2px solid var(--line);cursor:pointer;transition:all .15s">
+            👩</div>
+          <div class="av-o" data-v="🧔" onclick="selAv(this)"
+            style="width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;background:var(--ink2);border:2px solid var(--line);cursor:pointer;transition:all .15s">
+            🧔</div>
+          <div class="av-o" data-v="👨‍💼" onclick="selAv(this)"
+            style="width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;background:var(--ink2);border:2px solid var(--line);cursor:pointer;transition:all .15s">
+            👨‍💼</div>
+          <div class="av-o" data-v="👩‍💼" onclick="selAv(this)"
+            style="width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;background:var(--ink2);border:2px solid var(--line);cursor:pointer;transition:all .15s">
+            👩‍💼</div>
+          <div class="av-o" data-v="🤖" onclick="selAv(this)"
+            style="width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;background:var(--ink2);border:2px solid var(--line);cursor:pointer;transition:all .15s">
+            🤖</div>
+          <div class="av-o" data-v="🏦" onclick="selAv(this)"
+            style="width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;background:var(--ink2);border:2px solid var(--line);cursor:pointer;transition:all .15s">
+            🏦</div>
+        </div>
+      </div>
+      <div class="err" id="r-err">Please check your details and try again.</div>
+      <button class="btn btn-lime wfull" onclick="doRegister()">Create Account →</button>
+      <div class="auth-foot">Already have an account? <span class="auth-link" onclick="show('scr-login')">Sign in</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+     SCREEN: ROOM SELECT
+════════════════════════════════════ -->
+  <div id="scr-room" class="screen z room-screen">
+    <div style="text-align:center;margin-bottom:28px">
+      <div style="font-family:var(--display);font-size:26px;font-weight:700;color:var(--t0)">CHAIN<span
+          style="color:var(--lime)">VAULT</span></div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--t2);letter-spacing:3px;margin-top:4px">SELECT ROOM
+        MODE</div>
+    </div>
+    <div class="room-card">
+      <div style="font-family:var(--display);font-size:20px;font-weight:700;color:var(--t0);margin-bottom:6px">Join the
+        Network</div>
+      <div style="font-size:13px;color:var(--t1);margin-bottom:24px">Create a new room or join an existing one with a
+        6-digit code</div>
+
+      <!-- Option A: Create -->
+      <div class="room-option active" id="opt-create" onclick="selectRoomMode('create')">
+        <div class="room-opt-icon">⚡</div>
+        <div>
+          <div class="room-opt-title">Create New Room</div>
+          <div class="room-opt-sub">Start a fresh blockchain session — share the code with others</div>
+        </div>
+      </div>
+
+      <!-- Option B: Join -->
+      <div class="room-option" id="opt-join" onclick="selectRoomMode('join')">
+        <div class="room-opt-icon">🔗</div>
+        <div>
+          <div class="room-opt-title">Join Existing Room</div>
+          <div class="room-opt-sub">Enter the 6-digit code shared by the room creator</div>
+        </div>
+      </div>
+
+      <!-- Join input — shown only when join is selected -->
+      <div class="join-input-wrap" id="join-wrap">
+        <div style="font-size:10px;color:var(--t2);letter-spacing:2px;font-family:var(--mono);margin-bottom:10px">ENTER
+          ROOM CODE</div>
+        <input class="room-code-input" id="join-code" type="tel" maxlength="6" placeholder="000000"
+          oninput="this.value=this.value.replace(/\D/g,'').slice(0,6);validateJoinCode()" autocomplete="off" />
+        <div style="font-size:11px;color:var(--t2);text-align:center;margin-top:8px;font-family:var(--mono)"
+          id="join-hint">Enter the 6-digit code from the room creator</div>
+        <div class="err" id="join-err" style="text-align:center;margin-top:6px">Invalid code — must be 6 digits</div>
+      </div>
+
+      <hr class="sep" />
+
+      <button class="btn btn-lime wfull" id="room-go-btn" onclick="proceedToRoom()" style="font-size:15px;padding:15px">
+        ⚡ Create Room &amp; Enter
+      </button>
+
+      <div style="margin-top:14px;font-size:12px;color:var(--t2);text-align:center;font-family:var(--mono)">
+        Logged in as <span id="room-user-label" style="color:var(--lime)">—</span> ·
+        <span style="cursor:pointer;color:var(--sky)" onclick="doLogout()">Switch account</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+     SCREEN: APP
+════════════════════════════════════ -->
+  <div id="scr-app" class="screen z">
+    <!-- TOP NAV -->
+    <div class="topnav">
+      <div>
+        <div class="nav-brand">CHAIN<span>VAULT</span></div>
+        <div class="nav-room">ROOM <span id="tb-room"></span></div>
+      </div>
+      <div class="nav-right">
+        <div class="chip">
+          <div class="live-dot" id="net-dot"></div><span id="net-st" style="color:var(--t1)">…</span>
+        </div>
+        <div class="chip" style="color:var(--sky)">👥 <span id="tb-peers">0</span></div>
+        <div class="chain-badge chain-ok" id="tb-cv">✓ VALID</div>
+        <button class="btn btn-ghost btn-sm" onclick="copyRoom()">📋 Room Code</button>
+        <div class="user-btn" onclick="goTo('profile')">
+          <div class="user-av" id="tb-av">👤</div>
+          <div class="user-meta">
+            <div class="user-nm" id="tb-nm">—</div>
+            <div class="user-rl" id="tb-rl">USER</div>
+          </div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="doLogout()" title="Sign Out">🚪</button>
+      </div>
+    </div>
+
+    <!-- APP BODY -->
+    <div class="app-wrap">
+      <!-- SIDEBAR -->
+      <div class="sidebar">
+        <div class="nav-sec">BANKING</div>
+        <div class="nav-it on" id="ni-dashboard" onclick="goTo('dashboard')"><span class="nav-ic">📊</span>Dashboard
+        </div>
+        <div class="nav-it" id="ni-send" onclick="goTo('send')"><span class="nav-ic">💸</span>Send Money</div>
+        <div class="nav-it" id="ni-history" onclick="goTo('history')"><span class="nav-ic">📋</span>Tx History</div>
+        <div class="nav-it" id="ni-profile" onclick="goTo('profile')"><span class="nav-ic">👤</span>Profile</div>
+
+        <div class="nav-sec">BLOCKCHAIN</div>
+        <div class="nav-it" id="ni-mempool" onclick="goTo('mempool')">
+          <span class="nav-ic">⏳</span>Mempool
+          <span class="nav-pill" id="mp-pill">0</span>
+        </div>
+        <div class="nav-it" id="ni-chain" onclick="goTo('chain')"><span class="nav-ic">⛓</span>Chain</div>
+        <div class="nav-it" id="ni-nodes" onclick="goTo('nodes')"><span class="nav-ic">🌐</span>Network</div>
+
+        <div class="nav-sec" id="adm-sec" style="display:none">ADMIN</div>
+        <div class="nav-it" id="ni-admin" onclick="goTo('admin')" style="display:none"><span
+            class="nav-ic">🛡</span>Admin</div>
+      </div>
+
+      <!-- CONTENT -->
+      <div class="content">
+
+        <!-- ── DASHBOARD ── -->
+        <div id="pg-dashboard" class="pg on">
+          <div class="pg-hdr">
+            <div class="pg-title" id="dash-greet">Dashboard</div>
+            <div class="pg-sub" id="dash-date">—</div>
+          </div>
+
+          <div class="bal-hero">
+            <div class="bal-eyebrow">AVAILABLE BALANCE</div>
+            <div class="bal-amount">₹<span id="dash-bal">0</span></div>
+            <div class="bal-acc" id="dash-acc">ACC-000000</div>
+            <div class="bal-actions">
+              <button class="btn btn-lime btn-sm" onclick="goTo('send')">↗ Send</button>
+              <button class="btn btn-ghost btn-sm" onclick="goTo('history')">History</button>
+            </div>
+          </div>
+
+          <div class="stats-row">
+            <div class="stat teal">
+              <div class="stat-ico">⛓</div>
+              <div class="stat-v" id="ds-bl" style="color:var(--lime)">0</div>
+              <div class="stat-l">BLOCKS MINED</div>
+            </div>
+            <div class="stat mint">
+              <div class="stat-ico">✅</div>
+              <div class="stat-v" id="ds-cf" style="color:var(--mint)">0</div>
+              <div class="stat-l">CONFIRMED TX</div>
+            </div>
+            <div class="stat amber">
+              <div class="stat-ico">⏳</div>
+              <div class="stat-v" id="ds-pd" style="color:var(--amber)">0</div>
+              <div class="stat-l">PENDING TX</div>
+            </div>
+            <div class="stat sky">
+              <div class="stat-ico">👥</div>
+              <div class="stat-v" id="ds-pr" style="color:var(--sky)">0</div>
+              <div class="stat-l">LIVE PEERS</div>
+            </div>
+          </div>
+
+          <div class="g2">
+            <div class="card">
+              <div class="card-tl">RECENT TRANSACTIONS</div>
+              <div id="dash-tx">
+                <div class="empty">No transactions yet</div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-tl">NODE BALANCES</div>
+              <div id="dash-nodes">
+                <div class="empty">Waiting for peers…</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── SEND ── -->
+        <div id="pg-send" class="pg">
+          <div class="pg-hdr">
+            <div class="pg-title">Send Money</div>
+            <div class="pg-sub">Real-time P2P blockchain transfer</div>
+          </div>
+          <div class="g2">
+            <div>
+              <div class="card">
+                <div class="card-tl">SELECT RECIPIENT</div>
+                <div id="send-peers">
+                  <div class="empty">No peers online.<br />Share your room code to connect.</div>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-tl">TRANSFER DETAILS</div>
+                <div class="fld"><label>FROM</label><input id="snd-from" readonly /></div>
+                <div class="fld"><label>AMOUNT (₹)</label><input id="snd-amt" type="number" placeholder="e.g. 10000"
+                    min="1" oninput="updPreview()" /></div>
+                <div class="fld">
+                  <label>TYPE</label>
+                  <select id="snd-type"
+                    style="background:var(--ink2);border:1.5px solid var(--line);border-radius:10px;color:var(--t0);padding:13px 16px;font-family:var(--sans);font-size:14px;outline:none;width:100%">
+                    <option>NEFT</option>
+                    <option>RTGS</option>
+                    <option>IMPS</option>
+                    <option>UPI</option>
+                    <option>Wire</option>
+                  </select>
+                </div>
+                <div class="fld"><label>REMARKS (OPTIONAL)</label><input id="snd-note" placeholder="Payment for…"
+                    maxlength="50" /></div>
+                <button class="btn btn-lime wfull" id="snd-btn" onclick="initSend()" disabled>→ Send Now</button>
+              </div>
+            </div>
+            <div>
+              <div class="card">
+                <div class="card-tl">PREVIEW</div>
+                <div id="send-preview">
+                  <div class="empty">Select a recipient</div>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-tl">YOUR BALANCE</div>
+                <div style="font-family:var(--display);font-size:28px;font-weight:700;color:var(--lime);margin:4px 0"
+                  id="snd-bal">₹0</div>
+                <hr class="sep" />
+                <div class="card-tl" style="margin-bottom:8px">PEER BALANCES</div>
+                <div id="snd-peer-bals">
+                  <div class="muted">No peers yet</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── HISTORY ── -->
+        <div id="pg-history" class="pg">
+          <div class="pg-hdr">
+            <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:10px">
+              <div>
+                <div class="pg-title">Transaction History</div>
+                <div class="pg-sub">Click any transaction to view receipt</div>
+              </div>
+              <select id="hist-f" onchange="renderHistory()"
+                style="background:var(--ink2);border:1px solid var(--line);border-radius:8px;color:var(--t1);padding:8px 12px;font-family:var(--mono);font-size:11px;outline:none">
+                <option value="all">All Transactions</option>
+                <option value="sent">Sent</option>
+                <option value="received">Received</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="pending">Pending</option>
+              </select>
+            </div>
+          </div>
+          <div id="hist-list">
+            <div class="empty">No transactions yet</div>
+          </div>
+        </div>
+
+        <!-- ── PROFILE ── -->
+        <div id="pg-profile" class="pg">
+          <div class="pg-hdr">
+            <div class="pg-title">My Profile</div>
+            <div class="pg-sub">Account details & security</div>
+          </div>
+          <div class="g2">
+            <div class="card">
+              <div style="display:flex;align-items:center;gap:16px;margin-bottom:18px">
+                <div style="font-size:48px" id="prof-av">👤</div>
+                <div>
+                  <div style="font-family:var(--display);font-size:20px;font-weight:700" id="prof-nm">—</div>
+                  <div style="font-family:var(--mono);font-size:11px;color:var(--t2);margin-top:3px" id="prof-id">
+                    ACC-000000</div>
+                  <span class="bdg bdg-c" style="margin-top:6px;display:inline-flex">✓ VERIFIED</span>
+                </div>
+              </div>
+              <div id="prof-rows"></div>
+              <hr class="sep" />
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button class="btn btn-ghost btn-sm" onclick="doLogout()">🚪 Sign Out</button>
+                <button class="btn btn-sky btn-sm" onclick="doBiometric()">🔑 Test Biometric</button>
+              </div>
+            </div>
+            <div>
+              <div class="card">
+                <div class="card-tl">ACCOUNT STATS</div>
+                <div id="prof-stats"></div>
+              </div>
+              <div class="card">
+                <div class="card-tl">SECURITY STATUS</div>
+                <div style="font-size:13px;line-height:2;color:var(--t1)">
+                  Password Auth <span style="color:var(--mint)">● Active</span><br />
+                  Biometric Auth <span id="bio-status" style="color:var(--mint)">● Enabled (Demo)</span><br />
+                  Session <span style="color:var(--mint)">● Active</span><br />
+                  Last Login <span style="color:var(--lime)" id="prof-login">—</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── MEMPOOL ── -->
+        <div id="pg-mempool" class="pg">
+          <div class="pg-hdr">
+            <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:10px">
+              <div>
+                <div class="pg-title">Mempool</div>
+                <div class="pg-sub">Pending transactions — mine to confirm</div>
+              </div>
+              <button class="btn btn-amber" id="mine-btn" onclick="doMine()">⛏ Mine Block</button>
+            </div>
+          </div>
+          <div class="stats-row" style="margin-bottom:16px">
+            <div class="stat amber">
+              <div class="stat-v" id="mp-cnt" style="color:var(--amber)">0</div>
+              <div class="stat-l">PENDING</div>
+            </div>
+            <div class="stat sky">
+              <div class="stat-v" id="mp-vol" style="color:var(--sky)">₹0</div>
+              <div class="stat-l">PENDING VOL</div>
+            </div>
+            <div class="stat teal">
+              <div class="stat-v" id="mp-blk" style="color:var(--lime)">0</div>
+              <div class="stat-l">TOTAL BLOCKS</div>
+            </div>
+            <div class="stat mint">
+              <div class="stat-v" id="mp-conf" style="color:var(--mint)">0</div>
+              <div class="stat-l">CONFIRMED</div>
+            </div>
+          </div>
+          <div class="mine-prog" id="mine-prog">
+            <div style="font-family:var(--mono);font-size:11px;color:var(--amber)" id="mine-msg">Mining in progress…
+            </div>
+            <div class="prog-bar">
+              <div class="prog-fill" id="mine-fill" style="width:60%"></div>
+            </div>
+          </div>
+          <div id="mp-list">
+            <div class="empty">Mempool is empty</div>
+          </div>
+        </div>
+
+        <!-- ── CHAIN ── -->
+        <div id="pg-chain" class="pg">
+          <div class="pg-hdr">
+            <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:10px">
+              <div>
+                <div class="pg-title">Blockchain</div>
+                <div class="pg-sub">Immutable distributed ledger · SHA-256 · Difficulty 2</div>
+              </div>
+              <div class="chain-badge chain-ok" id="chain-cv">✓ CHAIN VALID</div>
+            </div>
+          </div>
+          <div id="chain-list">
+            <div class="empty">Chain loading…</div>
+          </div>
+        </div>
+
+        <!-- ── NETWORK NODES ── -->
+        <div id="pg-nodes" class="pg">
+          <div class="pg-hdr">
+            <div class="pg-title">Network Nodes</div>
+            <div class="pg-sub">Live peers on your blockchain room</div>
+          </div>
+          <div class="card">
+            <div class="card-tl">YOUR ROOM CODE — SHARE WITH PEERS</div>
+            <div class="room-code-big" id="room-display" onclick="copyRoom()">——</div>
+            <div style="text-align:center;margin-top:8px;font-family:var(--mono);font-size:10px;color:var(--t2)">Click
+              to copy · Open this app on another device and enter this code</div>
+            <div style="margin-top:12px;display:flex;gap:8px;justify-content:center">
+              <button class="btn btn-lime btn-sm" onclick="copyRoom()">📋 Copy Code</button>
+              <button class="btn btn-ghost btn-sm" onclick="shareRoom()">↗ Share</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-tl">CONNECTED PEERS (<span id="nodes-cnt">0</span>)</div>
+            <div id="nodes-list">
+              <div class="empty">No peers yet</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-tl">P2P EVENT LOG</div>
+            <div class="log-box" id="p2p-log"></div>
+          </div>
+        </div>
+
+        <!-- ── ADMIN ── -->
+        <div id="pg-admin" class="pg">
+          <div class="pg-hdr">
+            <div class="pg-title">🛡 Admin Dashboard</div>
+            <div class="pg-sub">System overview · All users & transactions</div>
+          </div>
+          <div class="stats-row">
+            <div class="stat sky">
+              <div class="stat-v" id="adm-u" style="color:var(--sky)">0</div>
+              <div class="stat-l">TOTAL USERS</div>
+            </div>
+            <div class="stat mint">
+              <div class="stat-v" id="adm-v" style="color:var(--mint)">₹0</div>
+              <div class="stat-l">TOTAL VOLUME</div>
+            </div>
+            <div class="stat amber">
+              <div class="stat-v" id="adm-t" style="color:var(--amber)">0</div>
+              <div class="stat-l">TRANSACTIONS</div>
+            </div>
+            <div class="stat teal">
+              <div class="stat-v" id="adm-b" style="color:var(--lime)">0</div>
+              <div class="stat-l">BLOCKS</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-tl">REGISTERED USERS</div>
+            <div class="tbl-wrap">
+              <table class="tbl">
+                <thead>
+                  <tr>
+                    <th></th>
+                    <th>NAME</th>
+                    <th>USERNAME</th>
+                    <th>ACCOUNT ID</th>
+                    <th>BALANCE</th>
+                    <th>ROLE</th>
+                    <th>STATUS</th>
+                  </tr>
+                </thead>
+                <tbody id="adm-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-tl">ALL TRANSACTIONS</div>
+            <div id="adm-txs">
+              <div class="empty">No transactions</div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /content -->
+    </div><!-- /app-wrap -->
+  </div><!-- /scr-app -->
+
+  <!-- ══ RECEIPT MODAL ══ -->
+  <div id="rcpt-modal" style="display:none">
+    <div class="overlay" onclick="closeRcpt(event)">
+      <div class="modal">
+        <button class="modal-x" onclick="closeRcpt()">✕</button>
+        <div class="rcpt-header">
+          <div class="rcpt-logo">CHAIN<span>VAULT</span></div>
+          <div class="rcpt-sub">TRANSACTION RECEIPT</div>
+          <div class="rcpt-status" id="rcpt-st">CONFIRMED</div>
+        </div>
+        <div class="rcpt-amount" id="rcpt-amt">₹0</div>
+        <div id="rcpt-rows"></div>
+        <div class="rcpt-hash" id="rcpt-hash"></div>
+        <div style="display:flex;gap:10px;margin-top:18px">
+          <button class="btn btn-ghost wfull btn-sm" onclick="window.print()">🖨 Print</button>
+          <button class="btn btn-lime wfull btn-sm" onclick="closeRcpt()">✓ Done</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ BIOMETRIC MODAL ══ -->
+  <div id="bio-modal" style="display:none">
+    <div class="overlay" onclick="closeBio(event)">
+      <div class="modal" style="max-width:360px;text-align:center">
+        <button class="modal-x" onclick="closeBio()">✕</button>
+        <div style="font-size:52px;margin-bottom:16px" id="bio-icon">🔑</div>
+        <div style="font-family:var(--display);font-size:20px;font-weight:700;margin-bottom:8px" id="bio-title">Touch
+          Sensor</div>
+        <div style="font-size:13px;color:var(--t1);margin-bottom:24px;line-height:1.6" id="bio-desc">Place your finger
+          on the sensor to authenticate</div>
+        <div id="bio-scan-area"
+          style="width:80px;height:80px;border-radius:50%;border:2px solid var(--sky);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:36px;background:var(--ink2);cursor:pointer;transition:all .3s"
+          onclick="triggerBioScan()">👆</div>
+        <div id="bio-status-text" style="font-family:var(--mono);font-size:11px;color:var(--t2)">Tap fingerprint above
+          to scan</div>
+        <div class="prog-bar" style="margin-top:14px">
+          <div class="prog-fill" id="bio-prog" style="width:0%"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <div id="notify" class="notify"></div>
+
+  <script>
+    // ═══════════════════════════════════════════════
+    // USER DATABASE (localStorage-backed)
+    // ═══════════════════════════════════════════════
+    const SEED_USERS = {
+      admin: { id: 'ACC-000001', un: 'admin', pw: 'admin123', fn: 'Admin', ln: 'System', av: '🛡', bal: 9999999, role: 'admin', joined: new Date().toISOString() },
+      alice: { id: 'ACC-000002', un: 'alice', pw: 'alice123', fn: 'Alice', ln: 'Kumar', av: '👩', bal: 500000, role: 'user', joined: new Date().toISOString() },
+      bob: { id: 'ACC-000003', un: 'bob', pw: 'bob123', fn: 'Bob', ln: 'Sharma', av: '🧔', bal: 350000, role: 'user', joined: new Date().toISOString() },
+    };
+
+    let DB = { users: { ...SEED_USERS }, nextId: 4 };
+    try { const s = localStorage.getItem('cv4'); if (s) { const d = JSON.parse(s); DB.users = d.users; DB.nextId = d.nextId; } } catch (e) { }
+    function saveDB() { try { localStorage.setItem('cv4', JSON.stringify(DB)); } catch (e) { } }
+
+    // ═══════════════════════════════════════════════
+    // SESSION & STATE
+    // ═══════════════════════════════════════════════
+    let S = null;    // current session user
+    let room = '';
+    let peers = {};  // peerId -> { fn, ln, un, av, id, bal }
+    let chain = [], mempool = [], ledger = [];
+    let confirmed = 0, totalVol = 0, mining = false;
+    let pn = null, selPeer = null;
+    let bioCallback = null;
+    let selAV = '👤';
+
+    // ═══════════════════════════════════════════════
+    // BLOCKCHAIN ENGINE
+    // ═══════════════════════════════════════════════
+    async function sha256(s) {
+      if (window.crypto && window.crypto.subtle) {
+        const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+        return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join('');
+      }
+      let h = 5381;
+      for (let i = 0; i < s.length; i++) h = (((h << 5) + h) + s.charCodeAt(i)) | 0;
+      return Math.abs(h).toString(16).padStart(64, '0');
+    }
+    function mkMerkle(txs) { if (!txs.length) return '0'.repeat(64); let L = txs.map(t => { let h = 0, s = t.id + t.from + t.to + t.amt; for (let i = 0; i < s.length; i++)h = ((h << 5) - h + s.charCodeAt(i)) | 0; return Math.abs(h).toString(16).padStart(16, '0'); }); while (L.length > 1) { const N = []; for (let i = 0; i < L.length; i += 2) { const c = L[i] + (L[i + 1] || L[i]); let h = 0; for (let j = 0; j < c.length; j++)h = ((h << 5) - h + c.charCodeAt(j)) | 0; N.push(Math.abs(h).toString(16).padStart(16, '0')); } L = N; } return L[0].padStart(64, '0'); }
+    async function doPow(data, prev) { const pfx = '0'.repeat(2); let n = 0, ts = Date.now(); while (true) { const h = await sha256(JSON.stringify({ ...data, prev, n, ts })); if (h.startsWith(pfx)) return { hash: h, n, ts }; n++; if (n % 300 === 0) await new Promise(r => setTimeout(r, 0)); } }
+    async function mkGenesis() { const d = { i: 0, txs: [], mk: '0'.repeat(64), miner: 'GENESIS' }; const { hash, n, ts } = await doPow(d, '0'.repeat(64)); return { ...d, prev: '0'.repeat(64), hash, n, ts }; }
+    async function mkBlock(txs, miner) { const prev = chain[chain.length - 1]; const mk = mkMerkle(txs); const d = { i: chain.length, txs, mk, miner }; const { hash, n, ts } = await doPow(d, prev.hash); return { ...d, prev: prev.hash, hash, n, ts }; }
+    function validChain(c) { for (let i = 1; i < c.length; i++)if (c[i].prev !== c[i - 1].hash) return false; return true; }
+
+    // ═══════════════════════════════════════════════
+    // AUTH
+    // ═══════════════════════════════════════════════
+    function show(id) { document.querySelectorAll('.screen').forEach(s => s.classList.remove('on')); document.getElementById(id).classList.add('on'); }
+    function g(id) { return document.getElementById(id); }
+
+    function doLogin() {
+      const u = g('l-user').value.trim().toLowerCase(), p = g('l-pass').value;
+      const user = DB.users[u];
+      if (!user || user.pw !== p) { g('l-err').classList.add('on'); return; }
+      g('l-err').classList.remove('on');
+      S = { user, at: new Date().toISOString() };
+      goToRoomScreen();
+    }
+
+    function doBiometric() {
+      // Check if real WebAuthn is available
+      if (window.PublicKeyCredential && !S) {
+        // On login screen — simulate biometric for demo
+        openBioModal('Sign In with Fingerprint', 'Authenticating your identity…', () => {
+          // Auto-login as alice for demo biometric
+          const user = DB.users['alice'] || Object.values(DB.users).find(u => u.role === 'user');
+          if (user) { S = { user, at: new Date().toISOString() }; goToRoomScreen(); }
+        });
+      } else if (S) {
+        openBioModal('Fingerprint Verified', 'Your biometric is active', () => toast('Biometric authentication OK ✓'));
+      } else {
+        openBioModal('Sign In with Fingerprint', 'Touch to authenticate', () => {
+          const user = Object.values(DB.users).find(u => u.role === 'user');
+          if (user) { S = { user, at: new Date().toISOString() }; goToRoomScreen(); }
+        });
+      }
+    }
+
+    function openBioModal(title, desc, cb) {
+      bioCallback = cb;
+      g('bio-title').textContent = title;
+      g('bio-desc').textContent = desc;
+      g('bio-icon').textContent = '🔑';
+      g('bio-status-text').textContent = 'Tap fingerprint above to scan';
+      g('bio-prog').style.width = '0%';
+      g('bio-scan-area').style.borderColor = 'var(--sky)';
+      g('bio-modal').style.display = 'block';
+    }
+    function closeBio(e) { if (!e || e.target === e.currentTarget) g('bio-modal').style.display = 'none'; }
+
+    function triggerBioScan() {
+      const sa = g('bio-scan-area');
+      sa.style.borderColor = 'var(--lime)';
+      sa.textContent = '👆';
+      g('bio-status-text').textContent = 'Scanning…';
+      let w = 0;
+      const iv = setInterval(() => {
+        w += 8; g('bio-prog').style.width = w + '%';
+        if (w >= 100) {
+          clearInterval(iv); sa.textContent = '✅'; g('bio-status-text').textContent = 'Verified!';
+          setTimeout(() => { g('bio-modal').style.display = 'none'; if (bioCallback) bioCallback(); }, 600);
+        }
+      }, 80);
+    }
+
+    function selAv(el) { document.querySelectorAll('.av-o').forEach(e => { e.style.borderColor = 'var(--line)'; }); el.style.borderColor = 'var(--lime)'; selAV = el.dataset.v; }
+
+    function doRegister() {
+      const fn = g('r-fn').value.trim(), ln = g('r-ln').value.trim(), un = g('r-un').value.trim().toLowerCase(),
+        em = g('r-em').value.trim(), pw = g('r-pw').value, pw2 = g('r-pw2').value,
+        bal = parseFloat(g('r-bal').value) || 250000, err = g('r-err');
+      if (!fn || !ln || !un || !em || !pw || pw !== pw2 || pw.length < 6) { err.textContent = 'Please fill all fields. Passwords must match (min 6 chars).'; err.classList.add('on'); return; }
+      if (DB.users[un]) { err.textContent = 'Username already taken.'; err.classList.add('on'); return; }
+      err.classList.remove('on');
+      const id = 'ACC-' + String(DB.nextId++).padStart(6, '0');
+      const user = { id, un, pw, fn, ln, em, av: selAV, bal, role: 'user', joined: new Date().toISOString() };
+      DB.users[un] = user; saveDB();
+      S = { user, at: new Date().toISOString() };
+      toast('Account created! Welcome ' + fn + '!');
+      goToRoomScreen();
+    }
+
+    function doLogout() { S = null; selPeer = null; roomMode = 'create'; if (pn && !pn._bc) try { pn.unsubscribeAll(); } catch (e) { } pn = null; peers = {}; show('scr-login'); }
+
+    // ═══════════════════════════════════════════════
+    // ROOM SCREEN
+    // ═══════════════════════════════════════════════
+    let roomMode = 'create'; // 'create' | 'join'
+
+    function goToRoomScreen() {
+      show('scr-room');
+      roomMode = 'create';
+      g('opt-create').classList.add('active');
+      g('opt-join').classList.remove('active');
+      g('join-wrap').classList.remove('on');
+      g('join-code').value = '';
+      g('join-err').classList.remove('on');
+      g('room-go-btn').textContent = '⚡ Create Room & Enter';
+      g('room-user-label').textContent = S?.user?.fn + ' ' + S?.user?.ln;
+    }
+
+    function selectRoomMode(mode) {
+      roomMode = mode;
+      g('opt-create').classList.toggle('active', mode === 'create');
+      g('opt-join').classList.toggle('active', mode === 'join');
+      g('join-wrap').classList.toggle('on', mode === 'join');
+      if (mode === 'create') {
+        g('room-go-btn').textContent = '⚡ Create Room & Enter';
+        g('join-err').classList.remove('on');
+      } else {
+        g('room-go-btn').textContent = '🔗 Join Room';
+        setTimeout(() => g('join-code').focus(), 100);
+      }
+    }
+
+    function validateJoinCode() {
+      const v = g('join-code').value;
+      g('join-err').classList.remove('on');
+      if (v.length === 6) {
+        g('join-hint').textContent = '✓ Code ready — tap Join Room';
+        g('join-hint').style.color = 'var(--mint)';
+      } else {
+        g('join-hint').textContent = `${v.length}/6 digits entered`;
+        g('join-hint').style.color = 'var(--t2)';
+      }
+    }
+
+    function proceedToRoom() {
+      if (roomMode === 'join') {
+        const code = g('join-code').value.trim();
+        if (code.length !== 6) { g('join-err').classList.add('on'); return; }
+        launchApp(code);
+      } else {
+        launchApp(null); // generate new room
+      }
+    }
+
+    // ═══════════════════════════════════════════════
+    // APP LAUNCH
+    // ═══════════════════════════════════════════════
+    async function launchApp(joinCode = null) {
+      show('scr-app');
+      const u = S.user;
+      g('tb-av').textContent = u.av || '👤';
+      g('tb-nm').textContent = u.fn + ' ' + u.ln;
+      g('tb-rl').textContent = u.role.toUpperCase();
+      if (u.role === 'admin') { g('adm-sec').style.display = 'block'; g('ni-admin').style.display = 'flex'; }
+      // Room
+      room = Math.floor(100000 + Math.random() * 900000).toString();
+      g('tb-room').textContent = room; g('room-display').textContent = room;
+      // Init
+      chain = []; mempool = []; ledger = []; peers = {}; confirmed = 0; totalVol = 0;
+      g('cov').style.display = 'flex'; g('cov-msg').textContent = 'Initialising blockchain…';
+
+      // Use provided join code or generate new room
+      room = joinCode || Math.floor(100000 + Math.random() * 900000).toString();
+      g('tb-room').textContent = room; g('room-display').textContent = room;
+
+      const gen = await mkGenesis(); chain.push(gen);
+      g('cov-msg').textContent = 'Connecting to P2P network… Room: ' + room;
+      try { await connectPN(); } catch (e) { await fallback(); }
+      g('cov').style.display = 'none';
+      goTo('dashboard'); renderAll();
+      plog('Session started as "' + u.fn + '" · Room ' + room, 'k');
+      notify('Welcome, ' + u.fn + '! 👋', false);
+    }
+
+    // ═══════════════════════════════════════════════
+    // PUBNUB P2P
+    // ═══════════════════════════════════════════════
+    const myId = () => S?.user?.id || '?';
+    function hsmsg() { const u = S.user; return { type: 'hs', from: myId(), fn: u.fn, ln: u.ln, un: u.un, av: u.av || '👤', bal: u.bal, accId: u.id, clen: chain.length }; }
+
+    async function connectPN() {
+      return new Promise((res, rej) => {
+        pn = new PubNub({ publishKey: 'demo', subscribeKey: 'demo', userId: myId() });
+        pn.addListener({
+          status(s) { if (s.category === 'PNConnectedCategory') { setNet('live'); plog('PubNub connected', 'k'); res(); } else if (s.category === 'PNNetworkDownCategory') { setNet('warn'); plog('Network down', 'w'); } },
+          message(e) { if (e.publisher === myId()) return; onMsg(e.message); },
+          presence(e) {
+            if (e.action === 'leave' || e.action === 'timeout') { const pid = e.uuid; if (peers[pid]) { plog('"' + peers[pid].fn + ' ' + peers[pid].ln + '" disconnected', 'w'); delete peers[pid]; renderAll(); } }
+            if (e.action === 'join' && e.uuid !== myId()) setTimeout(() => pub(hsmsg()), 500);
+          }
+        });
+        pn.subscribe({ channels: ['cv-' + room], withPresence: true });
+        setTimeout(async () => { pub(hsmsg()); res(); }, 2200);
+        setTimeout(() => rej(new Error('timeout')), 9000);
+      });
+    }
+
+    async function fallback() {
+      const bc = new BroadcastChannel('cv-' + room);
+      pn = { _bc: bc };
+      bc.onmessage = e => { if (e.data?.from !== myId()) onMsg(e.data); };
+      setNet('live');
+      plog('BroadcastChannel active (same device/tab)', 'w');
+      setTimeout(() => pub(hsmsg()), 300);
+    }
+
+    async function pub(data) {
+      if (!pn) return;
+      try { if (pn._bc) { pn._bc.postMessage(data); return; } await pn.publish({ channel: 'cv-' + room, message: data }); }
+      catch (e) { plog('Pub err: ' + e.message, 'e'); }
+    }
+
+    function onMsg(d) {
+      switch (d.type) {
+        case 'hs':
+          peers[d.from] = { fn: d.fn, ln: d.ln, un: d.un, av: d.av, accId: d.accId, bal: d.bal };
+          plog('"' + d.fn + ' ' + d.ln + '" joined · ₹' + fmt(d.bal), 'k');
+          notify(d.av + ' ' + d.fn + ' joined', false);
+          pub({ type: 'hs_ack', from: myId(), ...hsmsg() });
+          if (d.clen > chain.length) pub({ type: 'req_chain', from: myId(), to: d.from });
+          renderAll(); break;
+        case 'hs_ack':
+          if (!peers[d.from]) peers[d.from] = { fn: d.fn, ln: d.ln, un: d.un, av: d.av, accId: d.accId, bal: d.bal };
+          else peers[d.from].bal = d.bal;
+          renderAll(); break;
+        case 'req_chain':
+          if (d.to === myId()) pub({ type: 'chain_data', from: myId(), to: d.from, chain }); break;
+        case 'chain_data':
+          if (d.to === myId() && d.chain.length > chain.length && validChain(d.chain)) { chain = d.chain; syncLedger(); plog('Chain synced: ' + chain.length + ' blocks', 'i'); renderAll(); } break;
+        case 'tx': {
+          const tx = d.tx;
+          if (!mempool.find(t => t.id === tx.id) && !chain.flatMap(b => b.txs).find(t => t.id === tx.id)) {
+            // Optimistic real-time balance update
+            if (tx.from === myId()) S.user.bal -= tx.amt;
+            if (tx.to === myId()) S.user.bal += tx.amt;
+            if (peers[tx.from]) peers[tx.from].bal -= tx.amt;
+            if (peers[tx.to]) peers[tx.to].bal += tx.amt;
+            
+            mempool.push(tx); if (!ledger.find(t => t.id === tx.id)) ledger.unshift(tx);
+            plog('💸 TX: ' + tx.id + ' ₹' + fmt(tx.amt) + ' ' + tx.fn + '→' + tx.tn, 'k');
+            notify('₹' + fmt(tx.amt) + ' from ' + tx.fn, true); renderAll();
+          } break;
+        }
+        case 'block': {
+          const blk = d.blk;
+          if (!chain.find(b => b.hash === blk.hash)) {
+            if (blk.prev === chain[chain.length - 1].hash && validChain([...chain, blk])) {
+              chain.push(blk); applyBlk(blk);
+              plog('⛓ Block #' + blk.i + ' from ' + d.miner + ' · ' + blk.txs.length + ' txs', 'k');
+              notify('Block #' + blk.i + ' confirmed', false); renderAll();
+            } else if (d.chain && d.chain.length > chain.length && validChain(d.chain)) { chain = d.chain; syncLedger(); plog('Full chain sync', 'i'); renderAll(); }
+          } break;
+        }
+        case 'bal':
+          if (peers[d.from]) { peers[d.from].bal = d.bal; renderNodes(); renderSendUI(); } break;
+      }
+    }
+
+    // ═══════════════════════════════════════════════
+    // SEND FLOW
+    // ═══════════════════════════════════════════════
+    function selPeerFn(pid) {
+      selPeer = pid;
+      document.querySelectorAll('.send-peer').forEach(e => e.classList.toggle('sel', e.dataset.pid === pid));
+      g('snd-btn').disabled = false; updPreview();
+    }
+
+    function updPreview() {
+      const p = selPeer ? peers[selPeer] : null, amt = parseFloat(g('snd-amt').value) || 0;
+      if (!p) { g('send-preview').innerHTML = '<div class="empty">Select a recipient</div>'; return; }
+      const fee = Math.round(amt * 0.001);
+      g('send-preview').innerHTML = `<div class="preview-box">
+    <div class="preview-row"><span class="muted">TO</span><span style="color:var(--lime);font-weight:700">${p.av} ${p.fn} ${p.ln}</span></div>
+    <div class="preview-row"><span class="muted">ACCOUNT</span><span class="mono" style="font-size:11px">${p.accId}</span></div>
+    <div class="preview-row"><span class="muted">AMOUNT</span><span style="color:var(--lime);font-weight:700">₹${fmt(amt)}</span></div>
+    <div class="preview-row"><span class="muted">NETWORK FEE</span><span style="color:var(--t2)">₹${fmt(fee)}</span></div>
+    <div class="preview-row" style="margin-top:4px"><span style="font-weight:700">TOTAL</span><span style="color:var(--amber);font-family:var(--display);font-size:16px;font-weight:700">₹${fmt(amt + fee)}</span></div>
+  </div>`;
+    }
+
+    function initSend() {
+      if (!selPeer) return toast('Select a recipient', 'err');
+      const amt = parseFloat(g('snd-amt').value);
+      if (!amt || amt <= 0) return toast('Enter a valid amount', 'err');
+      if (amt > S.user.bal) return toast('Insufficient balance', 'err');
+      if (!peers[selPeer]) return toast('Peer disconnected', 'err');
+      executeSend(selPeer, amt);
+    }
+
+    async function executeSend(toId, amt) {
+      const u = S.user, peer = peers[toId];
+      const tx = { id: 'TX' + Date.now().toString(36).toUpperCase().slice(-7), from: u.id, fn: u.fn + ' ' + u.ln, to: toId, tn: peer.fn + ' ' + peer.ln, toAcc: peer.accId, amt, type: g('snd-type').value, note: g('snd-note').value.trim(), ts: Date.now(), status: 'pending' };
+      
+      // Optimistic real-time balance update
+      u.bal -= amt;
+      if (peer) peer.bal += amt;
+      
+      mempool.push(tx); ledger.unshift(tx);
+      await pub({ type: 'tx', from: myId(), tx });
+      plog('✈ TX ' + tx.id + ' → "' + tx.tn + '" ₹' + fmt(amt), 'k');
+      toast('₹' + fmt(amt) + ' sent to ' + tx.tn);
+      g('snd-amt').value = ''; g('snd-note').value = '';
+      selPeer = null; document.querySelectorAll('.send-peer').forEach(e => e.classList.remove('sel'));
+      g('snd-btn').disabled = true;
+      renderAll(); showReceipt(tx);
+    }
+
+    // ═══════════════════════════════════════════════
+    // MINING
+    // ═══════════════════════════════════════════════
+    async function doMine() {
+      if (mining) return toast('Already mining', 'warn');
+      if (!mempool.length) return toast('Mempool empty', 'warn');
+      mining = true;
+      const btn = g('mine-btn'); btn.innerHTML = '<span class="spin-sm"></span>Mining…'; btn.disabled = true;
+      const prog = g('mine-prog'); prog.classList.add('on');
+      g('mine-msg').textContent = 'Mining block #' + chain.length + ' · ' + mempool.length + ' transactions…';
+      plog('⛏ Mining block #' + chain.length + ' (' + mempool.length + ' txs)', 'i');
+      try {
+        const txs = [...mempool];
+        const miner = S.user.fn + ' ' + S.user.ln.charAt(0) + '.';
+        const blk = await mkBlock(txs, miner);
+        chain.push(blk); applyBlk(blk);
+        await pub({ type: 'block', from: myId(), miner, blk, chain });
+        plog('✅ Block #' + blk.i + ' mined! nonce:' + blk.n, 'k');
+        toast('⛏ Block #' + blk.i + ' mined & broadcast!');
+        renderAll();
+      } catch (e) { plog('Mining error: ' + e.message, 'e'); }
+      mining = false;
+      btn.innerHTML = '⛏ Mine Block'; btn.disabled = false;
+      prog.classList.remove('on');
+    }
+
+    function applyBlk(blk) {
+      const ids = new Set(blk.txs.map(t => t.id));
+      const inMempool = new Set(mempool.map(t => t.id)); // track what we already applied optimistically
+      mempool = mempool.filter(t => !ids.has(t.id));
+      ledger = ledger.map(t => ids.has(t.id) ? { ...t, status: 'confirmed' } : t);
+      blk.txs.forEach(tx => {
+        if (!inMempool.has(tx.id)) {
+          // Tx was not in our mempool, so apply balances now
+          if (tx.from === myId()) { S.user.bal -= tx.amt; }
+          if (tx.to === myId()) { S.user.bal += tx.amt; }
+          if (peers[tx.from]) peers[tx.from].bal -= tx.amt;
+          if (peers[tx.to]) peers[tx.to].bal += tx.amt;
+        }
+        confirmed++; totalVol += tx.amt;
+      });
+      saveDB();
+      pub({ type: 'bal', from: myId(), bal: S.user.bal });
+    }
+    function syncLedger() { const inC = new Set(chain.flatMap(b => b.txs.map(t => t.id))); mempool = mempool.filter(t => !inC.has(t.id)); ledger = ledger.map(t => inC.has(t.id) ? { ...t, status: 'confirmed' } : t); }
+
+    // ═══════════════════════════════════════════════
+    // RECEIPT
+    // ═══════════════════════════════════════════════
+    function showReceipt(tx) {
+      const ok = tx.status === 'confirmed';
+      g('rcpt-st').textContent = ok ? '✓ CONFIRMED' : '⏳ PENDING CONFIRMATION';
+      g('rcpt-st').style.color = ok ? 'var(--mint)' : 'var(--amber)';
+      g('rcpt-amt').textContent = '₹' + fmt(tx.amt);
+      const rows = [['TX ID', tx.id], ['FROM', tx.fn], ['TO', tx.tn], ['TYPE', tx.type || 'Transfer'],
+      ['REMARKS', tx.note || '—'], ['STATUS', (tx.status || 'pending').toUpperCase()], ['TIME', new Date(tx.ts).toLocaleString('en-IN')]];
+      g('rcpt-rows').innerHTML = rows.map(([l, v]) => `<div class="rcpt-row"><div class="rcpt-lbl">${l}</div><div class="rcpt-val">${v}</div></div>`).join('');
+      g('rcpt-hash').textContent = 'BLOCKCHAIN TX: ' + tx.id + '\nCHAINVAULT NETWORK · SHA-256 POW';
+      g('rcpt-modal').style.display = 'block';
+    }
+    function closeRcpt(e) { if (!e || e.target === e.currentTarget) g('rcpt-modal').style.display = 'none'; }
+
+    // ═══════════════════════════════════════════════
+    // RENDER
+    // ═══════════════════════════════════════════════
+    const fmt = n => new Intl.NumberFormat('en-IN').format(Math.round(n));
+
+    function renderAll() {
+      if (!S) return;
+      updateNav(); renderDash(); renderSendUI(); renderHistory();
+      renderMempool(); renderChain(); renderNodes(); renderAdmin();
+    }
+
+    function updateNav() {
+      const u = S.user;
+      g('tb-peers').textContent = Object.keys(peers).length;
+      g('ds-pr').textContent = Object.keys(peers).length;
+      g('ds-bl').textContent = chain.length;
+      g('ds-cf').textContent = confirmed;
+      g('ds-pd').textContent = mempool.length;
+      g('mp-cnt').textContent = mempool.length;
+      g('mp-vol').textContent = '₹' + fmt(mempool.reduce((s, t) => s + t.amt, 0));
+      g('mp-blk').textContent = chain.length;
+      g('mp-conf').textContent = confirmed;
+      const pill = g('mp-pill'); pill.textContent = mempool.length; pill.className = 'nav-pill' + (mempool.length ? ' on' : '');
+      const ok = validChain(chain);
+      ['tb-cv', 'chain-cv'].forEach(id => { const el = g(id); if (el) { el.className = 'chain-badge ' + (ok ? 'chain-ok' : 'chain-bad'); el.textContent = ok ? '✓ VALID' : '✗ TAMPERED'; } });
+      g('dash-bal').textContent = fmt(u.bal);
+      g('dash-acc').textContent = u.id + ' · @' + u.un;
+      g('dash-greet').textContent = 'Good day, ' + u.fn + '!';
+      g('dash-date').textContent = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      g('snd-bal').textContent = '₹' + fmt(u.bal);
+      g('snd-from').value = u.fn + ' ' + u.ln + ' (' + u.id + ')';
+    }
+
+    function renderDash() {
+      // Recent 5 tx
+      const rx = ledger.slice(0, 5);
+      g('dash-tx').innerHTML = rx.length ? `<div class="tx-wrap">${rx.map(t => txHtml(t, true)).join('')}</div>` : '<div class="empty">No transactions yet</div>';
+      // Nodes
+      const all = [{ id: myId(), fn: S.user.fn, ln: S.user.ln, av: S.user.av || '👤', bal: S.user.bal, me: true },
+      ...Object.entries(peers).map(([id, p]) => ({ id, fn: p.fn, ln: p.ln, av: p.av || '👤', bal: p.bal, me: false }))];
+      g('dash-nodes').innerHTML = all.map(n => `
+    <div class="peer-card ${n.me ? 'me' : ''}">
+      <div style="font-size:24px">${n.av}</div>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:700;color:${n.me ? 'var(--lime)' : 'var(--mint)'}">${n.fn} ${n.ln}${n.me ? ' <span style="font-size:10px;color:var(--t2);font-family:var(--mono)">(YOU)</span>' : ''}</div>
+        <div style="font-size:10px;color:var(--t2);font-family:var(--mono);margin-top:1px">${n.id}</div>
+      </div>
+      <div style="font-family:var(--display);font-size:16px;font-weight:700;color:${n.me ? 'var(--lime)' : 'var(--mint)'}">₹${fmt(n.bal)}</div>
+    </div>`).join('');
+    }
+
+    function renderSendUI() {
+      const ps = Object.entries(peers);
+      const chash = ps.map(([id, p]) => id + p.bal).join('|');
+      
+      if (g('send-peers').dataset.hash !== chash) {
+        g('send-peers').dataset.hash = chash;
+        g('send-peers').innerHTML = ps.length ? ps.map(([id, p]) => `
+      <div class="send-peer" data-pid="${id}" onclick="selPeerFn('${id}')">
+        <div style="font-size:24px">${p.av || '👤'}</div>
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:700">${p.fn} ${p.ln}</div>
+          <div style="font-size:10px;color:var(--t2);font-family:var(--mono)">${p.accId} · @${p.un}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:12px;color:var(--mint);font-weight:700">₹${fmt(p.bal)}</div>
+          <div style="font-size:9px;color:var(--mint);font-family:var(--mono)">● online</div>
+        </div>
+      </div>`).join('') : '<div class="empty">No peers online</div>';
+
+        g('snd-peer-bals').innerHTML = ps.length ? ps.map(([id, p]) => `
+      <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--line);font-size:12px">
+        <span>${p.av || '👤'} ${p.fn}</span><span style="color:var(--mint);font-weight:700">₹${fmt(p.bal)}</span>
+      </div>`).join('') : '<div class="muted">No peers connected</div>';
+      }
+      
+      if (selPeer) {
+        document.querySelectorAll('.send-peer').forEach(e => e.classList.toggle('sel', e.dataset.pid === selPeer));
+      } else {
+        document.querySelectorAll('.send-peer').forEach(e => e.classList.remove('sel'));
+      }
+    }
+
+    function txHtml(tx, compact = false) {
+      const dir = tx.from === myId() ? 'out' : (tx.to === myId() ? 'in' : 'blk');
+      const icons = { out: '↗', in: '↙', blk: '⛏' };
+      const bdg = `<span class="bdg ${tx.status === 'confirmed' ? 'bdg-c' : 'bdg-p'}">${(tx.status || 'PENDING').toUpperCase()}</span>`;
+      return `<div class="tx-item" onclick='showReceipt(${JSON.stringify(tx)})'>
+    <div class="tx-ico ${dir}">${icons[dir]}</div>
+    <div class="tx-body">
+      <div class="tx-name">${tx.fn} → ${tx.tn}</div>
+      <div class="tx-meta">${tx.id} · ${tx.type || 'Transfer'}${tx.note ? ' · ' + tx.note : ''}</div>
+    </div>
+    <div class="tx-right">
+      <div class="tx-amt ${dir === 'in' ? 'in' : 'out'}">${dir === 'in' ? '+' : '-'}₹${fmt(tx.amt)}</div>
+      <div class="tx-time">${new Date(tx.ts).toLocaleTimeString('en-IN')}</div>
+      ${compact ? bdg : ''}
+    </div>
+  </div>`;
+    }
+
+    function renderHistory() {
+      const f = g('hist-f')?.value || 'all', me = myId();
+      const filtered = ledger.filter(t => {
+        if (f === 'sent') return t.from === me;
+        if (f === 'received') return t.to === me;
+        if (f === 'confirmed') return t.status === 'confirmed';
+        if (f === 'pending') return t.status !== 'confirmed';
+        return true;
+      });
+      g('hist-list').innerHTML = filtered.length ? `<div class="tx-wrap">${filtered.map(t => txHtml(t)).join('')}</div>` : '<div class="empty">No matching transactions</div>';
+    }
+
+    function renderMempool() {
+      g('mp-list').innerHTML = mempool.length ? `<div class="tx-wrap">${mempool.map(t => txHtml(t)).join('')}</div>` : '<div class="empty">Mempool empty</div>';
+    }
+
+    function renderChain() {
+      g('chain-list').innerHTML = [...chain].reverse().map((b, i) => `
+    <div class="blk-item ${i === 0 && chain.length > 1 ? 'fresh' : ''}">
+      <div class="blk-num-bg">${b.i}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:6px">
+        <span style="font-family:var(--display);font-size:15px;font-weight:700;color:var(--lime)">Block #${b.i}</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          ${b.i === 0 ? '<span class="bdg bdg-g">GENESIS</span>' : ''}
+          <span style="font-family:var(--mono);font-size:9px;color:var(--t2)">nonce: ${b.n}</span>
+        </div>
+      </div>
+      <div class="blk-hash">HASH: ${b.hash}</div>
+      <div class="blk-prev">PREV: ${b.prev.slice(0, 52)}…</div>
+      <div class="blk-meta">
+        <span>📦 ${b.txs.length} txs</span>
+        <span>🌿 merkle: ${b.mk.slice(0, 14)}…</span>
+        <span>⛏ ${b.miner}</span>
+        <span>🕐 ${new Date(b.ts).toLocaleString('en-IN')}</span>
+      </div>
+      ${b.txs.length ? `<div style="margin-top:10px;border-top:1px solid var(--line);padding-top:8px">
+        ${b.txs.map(t => `<div style="font-family:var(--mono);font-size:9px;color:var(--t1);padding:2px 0"><span style="color:var(--lime)">${t.id}</span> · ${t.fn}→${t.tn} · ₹${fmt(t.amt)}</div>`).join('')}
+      </div>`: ''}
+    </div>`).join('');
+    }
+
+    function renderNodes() {
+      const ps = Object.entries(peers);
+      g('nodes-cnt').textContent = ps.length;
+      g('nodes-list').innerHTML = [
+        `<div class="peer-card me">
+      <div style="font-size:24px">${S?.user?.av || '👤'}</div>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:700;color:var(--lime)">${S?.user?.fn} ${S?.user?.ln} <span style="font-size:10px;color:var(--t2);font-family:var(--mono)">(YOU)</span></div>
+        <div style="font-size:10px;color:var(--t2);font-family:var(--mono)">${S?.user?.id} · Room ${room}</div>
+      </div>
+      <div style="text-align:right"><div style="color:var(--lime);font-weight:700">₹${fmt(S?.user?.bal || 0)}</div><div style="font-size:9px;color:var(--lime);font-family:var(--mono)">● HOST</div></div>
+    </div>`,
+        ...ps.map(([id, p]) => `
+    <div class="peer-card">
+      <div style="font-size:24px">${p.av || '👤'}</div>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:700;color:var(--mint)">${p.fn} ${p.ln}</div>
+        <div style="font-size:10px;color:var(--t2);font-family:var(--mono)">${p.accId} · @${p.un}</div>
+      </div>
+      <div style="text-align:right"><div style="color:var(--mint);font-weight:700">₹${fmt(p.bal || 0)}</div><div style="font-size:9px;color:var(--mint);font-family:var(--mono)">● ONLINE</div></div>
+    </div>`)
+      ].join('');
+    }
+
+    function renderAdmin() {
+      if (!S || S.user.role !== 'admin') return;
+      if (g('pg-admin').classList.contains('on') === false && !document.querySelectorAll('#pg-admin.on').length) return;
+      const users = Object.values(DB.users);
+      const vol = ledger.reduce((s, t) => s + t.amt, 0);
+      g('adm-u').textContent = users.length;
+      g('adm-v').textContent = '₹' + fmt(vol);
+      g('adm-t').textContent = ledger.length;
+      g('adm-b').textContent = chain.length;
+      g('adm-tbody').innerHTML = users.map(u => `<tr>
+    <td style="font-size:22px">${u.av || '👤'}</td>
+    <td><strong>${u.fn} ${u.ln}</strong></td>
+    <td style="font-family:var(--mono);color:var(--lime)">@${u.un}</td>
+    <td style="font-family:var(--mono);font-size:10px;color:var(--t2)">${u.id}</td>
+    <td style="font-weight:700;color:var(--mint)">₹${fmt(u.bal)}</td>
+    <td><span class="bdg ${u.role === 'admin' ? 'bdg-a' : 'bdg-c'}">${u.role.toUpperCase()}</span></td>
+    <td><span class="bdg bdg-c">● ACTIVE</span></td>
+  </tr>`).join('');
+      g('adm-txs').innerHTML = ledger.length ? `<div class="tx-wrap">${ledger.map(t => txHtml(t)).join('')}</div>` : '<div class="empty">No transactions</div>';
+    }
+
+    function renderProfile() {
+      const u = S?.user; if (!u) return;
+      g('prof-av').textContent = u.av || '👤';
+      g('prof-nm').textContent = u.fn + ' ' + u.ln;
+      g('prof-id').textContent = u.id + ' · @' + u.un;
+      g('prof-login').textContent = new Date(S.at).toLocaleString('en-IN');
+      const rows = [['EMAIL', u.em || '—'], ['ROLE', u.role.toUpperCase()], ['MEMBER SINCE', new Date(u.joined).toLocaleDateString('en-IN')]];
+      g('prof-rows').innerHTML = rows.map(([l, v]) => `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line);font-size:12px"><span style="color:var(--t2);font-family:var(--mono);font-size:10px">${l}</span><span style="font-weight:600">${v}</span></div>`).join('');
+      const myTx = ledger.filter(t => t.from === myId() || t.to === myId());
+      const sent = myTx.filter(t => t.from === myId()).reduce((s, t) => s + t.amt, 0);
+      const recv = myTx.filter(t => t.to === myId()).reduce((s, t) => s + t.amt, 0);
+      g('prof-stats').innerHTML = [['CURRENT BALANCE', '₹' + fmt(u.bal), 'var(--lime)'], ['TOTAL SENT', '₹' + fmt(sent), 'var(--rose)'], ['TOTAL RECEIVED', '₹' + fmt(recv), 'var(--mint)'], ['TRANSACTIONS', myTx.length, 'var(--sky)']].map(([l, v, c]) => `<div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--line);font-size:12px"><span style="color:var(--t2);font-family:var(--mono);font-size:10px">${l}</span><span style="font-weight:700;color:${c}">${v}</span></div>`).join('');
+    }
+
+    // ═══════════════════════════════════════════════
+    // NAV
+    // ═══════════════════════════════════════════════
+    function goTo(pg) {
+      document.querySelectorAll('.pg').forEach(p => p.classList.remove('on'));
+      document.querySelectorAll('.nav-it').forEach(n => n.classList.remove('on'));
+      const el = g('pg-' + pg); if (el) el.classList.add('on');
+      const ni = g('ni-' + pg); if (ni) ni.classList.add('on');
+      if (pg === 'profile') renderProfile();
+      if (pg === 'admin') { g('pg-admin').classList.add('on'); renderAdmin(); }
+      if (pg === 'nodes') { g('room-display').textContent = room; renderNodes(); }
+    }
+
+    // ═══════════════════════════════════════════════
+    // UTILITIES
+    // ═══════════════════════════════════════════════
+    function setNet(s) { const dot = g('net-dot'), tx = g('net-st'); if (s === 'live') { dot.className = 'live-dot on'; tx.textContent = 'LIVE'; } else if (s === 'warn') { dot.className = 'live-dot warn'; tx.textContent = 'RECONNECTING'; } else { dot.className = 'live-dot'; tx.textContent = '…'; } }
+    function copyRoom() { navigator.clipboard.writeText(room).then(() => toast('Room code copied: ' + room)); }
+    function shareRoom() { if (navigator.share) navigator.share({ title: 'Join my ChainVault room', text: 'Enter code: ' + room }).catch(() => copyRoom()); else copyRoom(); }
+    let toastT;
+    function toast(msg, type = '') { const el = g('toast'); el.textContent = msg; el.className = 'on' + (type ? ' ' + type : ''); clearTimeout(toastT); toastT = setTimeout(() => el.className = '', 3500); }
+    let notifyT;
+    function notify(msg, isTx = false) { const el = g('notify'); el.textContent = (isTx ? '💸 ' : '⛓ ') + msg; el.className = 'notify on' + (isTx ? ' tx' : ''); clearTimeout(notifyT); notifyT = setTimeout(() => el.className = 'notify', 4200); }
+    function plog(msg, t = 'i') { const box = g('p2p-log'); if (!box) return; const d = document.createElement('div'); const c = { k: 'log-k', i: 'log-i', w: 'log-w', e: 'log-e' }; d.className = c[t] || 'log-i'; d.textContent = '[' + new Date().toLocaleTimeString('en-IN') + '] ' + msg; box.appendChild(d); box.scrollTop = box.scrollHeight; }
+
+    // Handle single-quote in tx data for onclick
+    function showReceiptById(id) { const tx = ledger.find(t => t.id === id); if (tx) showReceipt(tx); }
+  </script>
+</body>
+
+</html>
